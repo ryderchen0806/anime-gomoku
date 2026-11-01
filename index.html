@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排球與殺手：動漫五子棋對決 (線上/單機版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #1a1a1a;
+            color: #f8fafc;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(255, 107, 0, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(139, 0, 0, 0.25) 0%, transparent 40%),
+                url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30,70 Q50,20 70,70 Q60,60 50,80 Q40,60 30,70 Z' fill='rgba(255,255,255,0.02)' transform='rotate(45 50 50)'/%3E%3C/svg%3E"),
+                url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='60' cy='60' r='50' stroke='rgba(255,0,0,0.05)' stroke-width='2' fill='none'/%3E%3Cpath d='M60,0 L60,120 M0,60 L120,60' stroke='rgba(255,0,0,0.05)' stroke-width='2'/%3E%3C/svg%3E");
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #222; }
+        ::-webkit-scrollbar-thumb { background: #ff6b00; border-radius: 4px; }
+
+        .board-wrapper {
+            padding: 16px; background: linear-gradient(145deg, #df8c3b, #c47123);
+            border: 8px solid #f8fafc; border-radius: 4px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9), inset 0 0 20px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .board-grid { display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr); position: relative; background-color: transparent; }
+        .cell { width: clamp(16px, 5.5vw, 36px); height: clamp(16px, 5.5vw, 36px); position: relative; cursor: pointer; }
+        .cell::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background-color: rgba(50, 20, 0, 0.6); transform: translateY(-50%); z-index: 1; }
+        .cell::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background-color: rgba(50, 20, 0, 0.6); transform: translateX(-50%); z-index: 1; }
+        .cell.top::after { top: 50%; } .cell.bottom::after { bottom: 50%; }
+        .cell.left::before { left: 50%; } .cell.right::before { right: 50%; }
+
+        .stone {
+            position: absolute; width: 86%; height: 86%; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10;
+            box-shadow: 2px 3px 5px rgba(0,0,0,0.6); animation: dropIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        @keyframes dropIn { 0% { transform: translate(-50%, -100%) scale(1.1); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        .stone.black { background: radial-gradient(circle at 35% 35%, #555 0%, #111 50%, #000 100%); }
+        .stone.white { background: radial-gradient(circle at 35% 35%, #fff 0%, #ddd 40%, #aaa 100%); }
+
+        .effect-container { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 50; display: flex; justify-content: center; align-items: center; }
+        .effect-volleyball { font-size: 2.5rem; animation: volleyPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; filter: drop-shadow(0 0 10px rgba(255, 107, 0, 0.8)); }
+        @keyframes volleyPop { 0% { transform: scale(0.2) rotate(-45deg); opacity: 1; } 50% { transform: scale(1.5) rotate(15deg); opacity: 1; filter: brightness(1.5); } 100% { transform: scale(2) rotate(45deg); opacity: 0; } }
+        .effect-blood-slash { position: relative; width: 80px; height: 80px; }
+        .single-slash {
+            position: absolute; top: 50%; left: -20%; background: linear-gradient(90deg, transparent, #ff0000, #8b0000, transparent);
+            height: 5px; width: 0%; border-radius: 50%; box-shadow: 0 0 10px rgba(255, 0, 0, 1); transform: translateY(-50%) rotate(35deg);
+            animation: singleSlashAnim 0.4s ease-out forwards;
+        }
+        @keyframes singleSlashAnim { 0% { width: 0%; opacity: 1; left: -20%; } 50% { width: 140%; opacity: 1; } 100% { width: 100%; opacity: 0; left: 20%; } }
+        
+        #giantSlashOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 100; display: none; justify-content: center; align-items: center; overflow: hidden; }
+        .giant-slash { background: linear-gradient(90deg, transparent, #ff0000, #500000, transparent); height: 40px; width: 0%; border-radius: 50%; box-shadow: 0 0 50px 10px rgba(255,0,0,0.8); transform: rotate(20deg); animation: giantSlashAnim 1s cubic-bezier(0.1, 0.9, 0.2, 1) forwards; }
+        @keyframes giantSlashAnim { 0% { width: 0%; opacity: 0.8; margin-left: -50vw; } 40% { width: 200vw; opacity: 1; } 100% { width: 200vw; opacity: 0; margin-left: 50vw; } }
+
+        #coinOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 99; overflow: hidden; display: none; }
+        .coin { position: absolute; top: -50px; font-size: 2rem; animation: fall linear forwards; filter: drop-shadow(0 0 5px rgba(255,215,0,0.8)); }
+        @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+
+        .player-panel { background: rgba(30, 30, 30, 0.8); border: 2px solid #333; backdrop-filter: blur(5px); transition: all 0.3s ease; }
+        .player-panel.active-turn { border-color: #ff6b00; box-shadow: 0 0 20px rgba(255, 107, 0, 0.4); transform: scale(1.02); }
+        .modal-bg { backdrop-filter: blur(8px); }
+        .avatar-img { border-radius: 9999px; object-fit: cover; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5); }
+        .timer-bar { height: 6px; background: #ff6b00; border-radius: 3px; transition: width 1s linear, background-color 0.3s; }
+        .timer-warning { background: #ff0000; box-shadow: 0 0 10px red; }
+        .quote-input { background: transparent; border: 1px dashed transparent; outline: none; transition: border 0.3s; width: 100%; text-align: center; }
+        .quote-input:focus { border-color: #ff6b00; background: rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col relative">
+
+    <!-- 頂部資訊列 -->
+    <header class="h-14 bg-black/80 border-b border-orange-600/50 flex items-center px-4 justify-between flex-shrink-0 z-20">
+        <div class="flex items-center gap-3">
+            <span class="text-orange-500 font-black text-2xl italic tracking-wider">GOMOKU ARENA</span>
+            <span id="displayRoomId" class="text-xs font-bold text-white bg-red-800 px-3 py-1 rounded shadow cursor-pointer hover:bg-red-700 transition" title="點擊複製房號">房號: 載入中</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="statusIndicator" class="px-4 py-1.5 rounded bg-gray-900 text-sm font-bold border border-gray-700 text-orange-400">正在連線...</div>
+            <button id="inviteBtn" class="bg-orange-600 hover:bg-orange-500 text-white px-3 py-1 rounded text-sm font-bold transition-colors shadow-[0_0_10px_rgba(255,107,0,0.5)]">🔗 複製邀請網址</button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-y-auto overflow-x-hidden md:overflow-hidden">
+        
+        <!-- 左側邊欄：好友列表 -->
+        <aside class="w-full md:w-64 bg-black/60 border-t md:border-t-0 md:border-r border-gray-800 flex flex-col flex-shrink-0 order-2 md:order-1 min-h-[300px] md:min-h-0">
+            <div class="p-3 border-b border-gray-800 bg-black/80">
+                <h3 class="font-bold text-gray-300 mb-2">👥 搜尋好友</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="searchFriendInput" placeholder="輸入名稱..." class="flex-1 bg-gray-900 text-white text-sm px-2 py-1 rounded outline-none border border-gray-700 focus:border-orange-500">
+                    <button id="searchFriendBtn" class="bg-gray-700 hover:bg-gray-600 px-2 rounded text-sm text-white">搜尋</button>
+                </div>
+            </div>
+            <div class="p-3 border-b border-gray-800 bg-black/60 text-xs text-gray-400 max-h-32 overflow-y-auto" id="searchResultArea" style="display: none;"></div>
+            <div class="flex-1 overflow-y-auto p-2 space-y-2" id="friendList"></div>
+        </aside>
+
+        <!-- 中央：對戰區 -->
+        <div class="flex-1 flex items-center justify-center p-2 md:p-4 relative z-10 order-1 md:order-2 overflow-y-auto">
+            <div class="grid grid-cols-2 xl:grid-cols-[240px_auto_240px] gap-2 md:gap-4 xl:gap-8 items-center justify-items-center w-full max-w-7xl mb-4 md:mb-0">
+                
+                <!-- 玩家 1 (黑子) -->
+                <div id="panelP1" class="player-panel w-full md:max-w-[240px] rounded-xl p-2 md:p-4 flex flex-col items-center text-center col-span-1 xl:col-span-1 xl:order-1">
+                    <div id="timerContainerP1" class="w-full bg-gray-800 h-1 md:h-1.5 mb-2 md:mb-3 rounded overflow-hidden opacity-0"><div id="timerBarP1" class="timer-bar w-full"></div></div>
+                    <img id="avatarImgP1" src="" class="avatar-img hidden mb-1 md:mb-2 border-2 border-orange-500 w-10 h-10 md:w-14 md:h-14" alt="P1">
+                    <div id="circleP1" class="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-900 border-2 border-black shadow-lg mb-1 md:mb-2 flex items-center justify-center text-white font-bold text-xs md:text-base">黑</div>
+                    <div id="nameP1" class="text-sm md:text-xl font-black text-white w-full truncate mb-1">等待加入...</div>
+                    <div id="danP1" class="text-[10px] md:text-sm font-bold text-orange-400 bg-orange-900/30 px-2 py-0.5 md:px-3 md:py-1 rounded-full border border-orange-500/50 mb-1 md:mb-2">1段 (0分)</div>
+                    <input type="text" id="quoteP1" class="quote-input text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2 italic" placeholder="點擊編輯專屬名言..." readonly>
+                </div>
+
+                <!-- 玩家 2 (白子) -->
+                <div id="panelP2" class="player-panel w-full md:max-w-[240px] rounded-xl p-2 md:p-4 flex flex-col items-center text-center col-span-1 xl:col-span-1 xl:order-3">
+                    <div id="timerContainerP2" class="w-full bg-gray-800 h-1 md:h-1.5 mb-2 md:mb-3 rounded overflow-hidden opacity-0"><div id="timerBarP2" class="timer-bar w-full"></div></div>
+                    <img id="avatarImgP2" src="" class="avatar-img hidden mb-1 md:mb-2 border-2 border-gray-400 w-10 h-10 md:w-14 md:h-14" alt="P2">
+                    <div id="circleP2" class="w-8 h-8 md:w-12 md:h-12 rounded-full bg-zinc-100 border-2 border-gray-400 shadow-lg mb-1 md:mb-2 flex items-center justify-center text-black font-bold text-xs md:text-base">白</div>
+                    <div id="nameP2" class="text-sm md:text-xl font-black text-white w-full truncate mb-1">等待加入...</div>
+                    <div id="danP2" class="text-[10px] md:text-sm font-bold text-orange-400 bg-orange-900/30 px-2 py-0.5 md:px-3 md:py-1 rounded-full border border-orange-500/50 mb-1 md:mb-2">1段 (0分)</div>
+                    <input type="text" id="quoteP2" class="quote-input text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2 italic" placeholder="點擊編輯專屬名言..." readonly>
+                </div>
+
+                <!-- 棋盤區 -->
+                <div class="board-wrapper flex-shrink-0 col-span-2 xl:col-span-1 xl:order-2">
+                    <div id="boardGrid" class="board-grid"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 聊天室浮動視窗 -->
+    <div id="chatModal" class="fixed bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-4 w-[95vw] md:w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl flex flex-col hidden z-40 overflow-hidden transform transition-transform">
+        <div class="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center cursor-pointer" id="chatHeader">
+            <span class="font-bold text-orange-400">💬 房間聊天室</span>
+            <span class="text-gray-400 hover:text-white" id="closeChatBtn">▼</span>
+        </div>
+        <div id="chatMessages" class="h-64 overflow-y-auto p-3 space-y-2 text-sm bg-black/50"></div>
+        <div class="p-2 border-t border-gray-700 flex">
+            <input type="text" id="chatInput" placeholder="輸入訊息..." class="flex-1 bg-gray-800 text-white px-3 py-2 rounded-l outline-none focus:ring-1 ring-orange-500">
+            <button id="sendChatBtn" class="bg-orange-600 hover:bg-orange-500 px-3 py-2 rounded-r font-bold">送出</button>
+        </div>
+    </div>
+
+    <!-- 登入視窗 -->
+    <div id="loginModal" class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 modal-bg hidden">
+        <div class="bg-gray-900 border-2 border-orange-600 rounded-xl p-8 max-w-sm w-full text-center shadow-[0_0_30px_rgba(255,107,0,0.3)]">
+            <h2 class="text-2xl font-black text-white mb-4">加入排球與殺手之戰</h2>
+            <p class="text-sm text-gray-400 mb-4">輸入您的名字 (包含「木兔光太郎」、「南雲」或「大佛」可觸發專屬特效)</p>
+            
+            <div class="flex flex-col items-center justify-center mb-4">
+                <div class="relative w-20 h-20 group cursor-pointer rounded-full bg-gray-800" id="avatarPickerContainer">
+                    <img id="avatarPreview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236b7280'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E" class="w-full h-full rounded-full object-cover border-2 border-gray-600 group-hover:border-orange-500 transition shadow-lg">
+                    <div class="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                        <span class="text-xs text-white font-bold">📸 更換</span>
+                    </div>
+                    <input type="file" id="playerAvatarFile" accept="image/*" class="hidden">
+                </div>
+                <p class="text-xs text-gray-500 mt-2">點擊設定頭像 (支援拍照/相簿)</p>
+                <input type="hidden" id="playerAvatarInput">
+            </div>
+
+            <input type="text" id="playerNameInput" placeholder="您的名字..." class="w-full bg-gray-800 text-white px-4 py-3 rounded mb-3 text-center text-lg outline-none border border-gray-700 focus:border-orange-500" maxlength="10">
+            
+            <div id="roomInputContainer" class="border-t border-gray-700 my-4 pt-4">
+                <p class="text-sm text-gray-400 mb-2">已有房號？輸入加入 (留空則創建新房)</p>
+                <input type="tel" id="roomInput" placeholder="輸入 6 碼數字房號..." class="w-full bg-gray-800 text-white px-4 py-3 rounded mb-2 text-center text-xl tracking-widest font-mono outline-none border border-gray-700 focus:border-red-500" maxlength="6">
+            </div>
+
+            <button id="joinBtn" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded transition-colors text-lg">開始遊戲</button>
+        </div>
+    </div>
+
+    <!-- 勝負結算視窗 -->
+    <div id="resultModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 modal-bg">
+        <div class="bg-gray-900 border-2 border-gray-600 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+            <div id="resultIcon" class="text-6xl mb-4 relative z-10">👑</div>
+            <h2 id="resultTitle" class="text-4xl font-black mb-2 text-white relative z-10">獲勝！</h2>
+            <p id="resultScore" class="text-orange-400 font-bold text-lg mb-6 relative z-10">積分變化: +10分 (2段)</p>
+            <button id="restartBtn" class="bg-gray-200 hover:bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 w-full relative z-10 hidden">重新開始 (交換先後手)</button>
+            <p id="waitHostText" class="text-gray-400 text-sm mt-4 hidden relative z-10">等待房主重新開始...</p>
+        </div>
+    </div>
+
+    <!-- 特效與提示 -->
+    <div id="giantSlashOverlay"><div class="giant-slash"></div></div>
+    <div id="coinOverlay"></div>
+    <div id="toast" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg border border-gray-600 transition-opacity duration-300 opacity-0 pointer-events-none z-50"></div>
+
+    <script>
+        // ==============================================================
+        // 🚀 全新 P2P 連線架構 (WebRTC / PeerJS)
+        // 完全不需要資料庫！只要傳上 Vercel，輸入房號即可點對點連線！
+        // ==============================================================
+
+        let isLocalMode = false;
+        const BOARD_SIZE = 15;
+        const TIME_LIMIT = 35;
+        
+        let myUid = 'user_' + Math.floor(Math.random() * 1000000);
+        let myProfile = { name: '', avatar: '', quote: '', score: 0, dan: 1 };
+        let roomId = null;
+        let roomData = null;
+        let isHost = false;
+        let timerInterval = null;
+        
+        // P2P 連線變數
+        let peer = null;
+        let conn = null;
+
+        // DOM 元素
+        const boardGrid = document.getElementById('boardGrid');
+        const loginModal = document.getElementById('loginModal');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const playerAvatarInput = document.getElementById('playerAvatarInput');
+        const playerAvatarFile = document.getElementById('playerAvatarFile');
+        const avatarPickerContainer = document.getElementById('avatarPickerContainer');
+        const avatarPreview = document.getElementById('avatarPreview');
+        const roomInput = document.getElementById('roomInput');
+        const joinBtn = document.getElementById('joinBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const displayRoomId = document.getElementById('displayRoomId');
+        
+        const panelP1 = document.getElementById('panelP1'), panelP2 = document.getElementById('panelP2');
+        const nameP1 = document.getElementById('nameP1'), nameP2 = document.getElementById('nameP2');
+        const danP1 = document.getElementById('danP1'), danP2 = document.getElementById('danP2');
+        const quoteP1 = document.getElementById('quoteP1'), quoteP2 = document.getElementById('quoteP2');
+        const avatarImgP1 = document.getElementById('avatarImgP1'), avatarImgP2 = document.getElementById('avatarImgP2');
+        const circleP1 = document.getElementById('circleP1'), circleP2 = document.getElementById('circleP2');
+        const timerContainerP1 = document.getElementById('timerContainerP1'), timerContainerP2 = document.getElementById('timerContainerP2');
+        const timerBarP1 = document.getElementById('timerBarP1'), timerBarP2 = document.getElementById('timerBarP2');
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg; toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 3000);
+        }
+        function calculateDan(score) { return Math.min(9, Math.floor(score / 20) + 1); }
+        function getDanDisplay(score) { return isLocalMode ? "單機版無段位" : `${calculateDan(score)}段 (${score}分)`; }
+
+        // 頭像上傳邏輯
+        avatarPickerContainer.addEventListener('click', () => playerAvatarFile.click());
+        playerAvatarFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                    const MAX_SIZE = 150; let w = img.width, h = img.height;
+                    if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } } 
+                    else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
+                    canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    avatarPreview.src = dataUrl; playerAvatarInput.value = dataUrl;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 初始化
+        function init() {
+            loginModal.classList.remove('hidden');
+            const savedProfile = localStorage.getItem('gomoku_profile_v2');
+            if (savedProfile) {
+                try {
+                    const parsed = JSON.parse(savedProfile);
+                    playerNameInput.value = parsed.name || '';
+                    playerAvatarInput.value = parsed.avatar || '';
+                    myProfile.score = parsed.score || 0;
+                    if (parsed.avatar) avatarPreview.src = parsed.avatar;
+                } catch(e) {}
+            }
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlRoom = urlParams.get('room');
+            if (urlRoom) roomInput.value = urlRoom;
+        }
+        init();
+
+        // 點擊開始遊戲
+        joinBtn.addEventListener('click', () => {
+            const name = playerNameInput.value.trim() || '無名玩家';
+            const avatar = playerAvatarInput.value.trim();
+            myProfile.name = name; myProfile.avatar = avatar;
+            myProfile.uid = myUid;
+            
+            localStorage.setItem('gomoku_profile_v2', JSON.stringify(myProfile));
+            loginModal.classList.add('hidden');
+
+            const inputRoom = roomInput.value.trim().replace(/\D/g, '');
+            roomId = inputRoom ? inputRoom : Math.floor(100000 + Math.random() * 900000).toString();
+            try { window.history.replaceState(null, '', `?room=${roomId}`); } catch (e) {}
+            displayRoomId.textContent = `房號: ${roomId}`;
+            
+            startP2PConnection(inputRoom === "");
+        });
+
+        // 建立 P2P 連線
+        function startP2PConnection(creatingRoom) {
+            statusIndicator.textContent = '連線伺服器中...';
+            
+            if (creatingRoom) {
+                isHost = true;
+                // 房主：建立專屬 ID 等待連線
+                peer = new Peer('gomoku-p2p-' + roomId);
+                
+                roomData = {
+                    player1: { ...myProfile },
+                    player2: null,
+                    board: Array(BOARD_SIZE * BOARD_SIZE).fill(0),
+                    turn: 1, status: 'waiting', lastMove: null, lastMoveTime: Date.now()
+                };
+                renderGame(null);
+
+                peer.on('open', (id) => {
+                    statusIndicator.textContent = '⏳ 等待對手輸入房號...';
+                });
+
+                peer.on('connection', (connection) => {
+                    if (conn) return; // 已經有人連線了
+                    conn = connection;
+                    setupHostConnection();
+                });
+
+            } else {
+                isHost = false;
+                // 客戶端：隨機 ID，主動連線到房主
+                peer = new Peer();
+                peer.on('open', (id) => {
+                    conn = peer.connect('gomoku-p2p-' + roomId);
+                    setupGuestConnection();
+                });
+            }
+
+            peer.on('error', (err) => {
+                console.error(err);
+                showToast("連線發生錯誤：" + err.type);
+                statusIndicator.textContent = '連線失敗';
+            });
+        }
+
+        // 房主專用連線設定
+        function setupHostConnection() {
+            conn.on('open', () => {
+                showToast("對手已連線！");
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'GUEST_JOIN') {
+                    roomData.player2 = data.profile;
+                    roomData.status = 'playing';
+                    roomData.lastMoveTime = Date.now();
+                    syncStateToGuest();
+                } else if (data.type === 'MOVE_REQUEST') {
+                    processMove(data.r, data.c);
+                } else if (data.type === 'CHAT') {
+                    displayChatMessage(data.text, data.sender);
+                } else if (data.type === 'QUOTE_UPDATE') {
+                    roomData.player2.quote = data.text;
+                    syncStateToGuest();
+                } else if (data.type === 'RESTART_REQUEST') {
+                    resetGame(false);
+                }
+            });
+
+            conn.on('close', () => {
+                showToast("對手已斷線");
+                roomData.status = 'waiting';
+                roomData.player2 = null;
+                conn = null;
+                renderGame(roomData);
+            });
+        }
+
+        // 客戶端專用連線設定
+        function setupGuestConnection() {
+            conn.on('open', () => {
+                showToast("成功加入房間！");
+                conn.send({ type: 'GUEST_JOIN', profile: myProfile });
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'STATE_UPDATE') {
+                    const oldData = roomData;
+                    roomData = data.data;
+                    renderGame(oldData);
+                } else if (data.type === 'CHAT') {
+                    displayChatMessage(data.text, data.sender);
+                }
+            });
+
+            conn.on('close', () => {
+                showToast("房主已關閉房間");
+                statusIndicator.textContent = '連線中斷';
+            });
+        }
+
+        // 房主同步狀態給對手
+        function syncStateToGuest() {
+            if (conn && conn.open) {
+                conn.send({ type: 'STATE_UPDATE', data: roomData });
+            }
+            renderGame(roomData); // 自己也更新畫面
+        }
+
+        // 複製網址功能
+        document.getElementById('inviteBtn').addEventListener('click', () => {
+            const url = window.location.origin + window.location.pathname + '?room=' + roomId;
+            const textarea = document.createElement('textarea'); textarea.value = `來打五子棋！我的房號是：${roomId}\n可以直接點擊網址加入：\n${url}`;
+            textarea.style.position = 'fixed'; textarea.style.opacity = '0'; document.body.appendChild(textarea);
+            textarea.focus(); textarea.select(); textarea.setSelectionRange(0, 99999);
+            try { document.execCommand('copy') ? showToast("已複製邀請網址與房號！") : showToast("複製失敗"); } 
+            catch(e) { showToast("複製失敗"); }
+            document.body.removeChild(textarea);
+        });
+
+        function renderGame(oldData) {
+            if (!roomData) return;
+            const updatePlayerUI = (pData, nameEl, danEl, avEl, cirEl, qEl) => {
+                if (pData) {
+                    nameEl.textContent = pData.name; danEl.textContent = getDanDisplay(pData.score);
+                    if (pData.avatar) { avEl.src = pData.avatar; avEl.classList.remove('hidden'); cirEl.classList.add('hidden'); } 
+                    else { avEl.classList.add('hidden'); cirEl.classList.remove('hidden'); }
+                    qEl.value = pData.quote || '';
+                    if (pData.uid === myUid) { qEl.removeAttribute('readonly'); qEl.classList.add('cursor-text'); } 
+                    else { qEl.setAttribute('readonly', true); qEl.classList.remove('cursor-text'); }
+                } else {
+                    nameEl.textContent = '等待加入...'; danEl.textContent = '-';
+                    avEl.classList.add('hidden'); cirEl.classList.remove('hidden');
+                    qEl.value = ''; qEl.setAttribute('readonly', true);
+                }
+            };
+            updatePlayerUI(roomData.player1, nameP1, danP1, avatarImgP1, circleP1, quoteP1);
+            updatePlayerUI(roomData.player2, nameP2, danP2, avatarImgP2, circleP2, quoteP2);
+
+            if (roomData.status === 'waiting') {
+                statusIndicator.textContent = '⏳ 等待對手加入...';
+                panelP1.classList.remove('active-turn'); panelP2.classList.remove('active-turn');
+                timerContainerP1.classList.add('opacity-0'); timerContainerP2.classList.add('opacity-0');
+            } else if (roomData.status === 'playing') {
+                const isMyTurn = (roomData.turn === 1 && myUid === roomData.player1.uid) || (roomData.turn === 2 && roomData.player2 && myUid === roomData.player2.uid);
+                statusIndicator.innerHTML = isMyTurn ? '<span class="text-green-400">● 輪到您落子</span>' : '<span class="text-orange-400">等待對手落子...</span>';
+                if (roomData.turn === 1) { panelP1.classList.add('active-turn'); panelP2.classList.remove('active-turn'); timerContainerP1.classList.remove('opacity-0'); timerContainerP2.classList.add('opacity-0'); } 
+                else { panelP2.classList.add('active-turn'); panelP1.classList.remove('active-turn'); timerContainerP2.classList.remove('opacity-0'); timerContainerP1.classList.add('opacity-0'); }
+                startTimer();
+            } else {
+                timerContainerP1.classList.add('opacity-0'); timerContainerP2.classList.add('opacity-0'); stopTimer();
+            }
+
+            renderBoard(oldData);
+
+            if (roomData.status === 'finished' && (!oldData || oldData.status === 'playing')) handleGameEnd();
+            else if (roomData.status === 'playing' && oldData?.status === 'finished') {
+                document.getElementById('resultModal').classList.add('hidden');
+                document.getElementById('giantSlashOverlay').style.display = 'none';
+                document.getElementById('coinOverlay').style.display = 'none';
+            }
+        }
+
+        function renderBoard(oldData) {
+            boardGrid.innerHTML = '';
+            for (let i = 0; i < roomData.board.length; i++) {
+                const r = Math.floor(i / BOARD_SIZE), c = i % BOARD_SIZE;
+                const cell = document.createElement('div'); cell.className = 'cell';
+                if (r === 0) cell.classList.add('top'); if (r === BOARD_SIZE - 1) cell.classList.add('bottom');
+                if (c === 0) cell.classList.add('left'); if (c === BOARD_SIZE - 1) cell.classList.add('right');
+                cell.onclick = () => handleMoveClick(r, c);
+
+                if (roomData.board[i] !== 0) {
+                    const stone = document.createElement('div');
+                    stone.className = `stone ${roomData.board[i] === 1 ? 'black' : 'white'}`;
+                    cell.appendChild(stone);
+                }
+
+                if (roomData.lastMove && roomData.lastMove.r === r && roomData.lastMove.c === c) {
+                    if (!oldData || !oldData.lastMove || oldData.lastMove.r !== r || oldData.lastMove.c !== c) {
+                        triggerSpecialEffect(cell, roomData.lastMove.playerName);
+                    }
+                }
+                boardGrid.appendChild(cell);
+            }
+        }
+
+        function handleMoveClick(r, c) {
+            if (roomData.status !== 'playing') return;
+            const isMyTurn = (roomData.turn === 1 && myUid === roomData.player1.uid) || (roomData.turn === 2 && roomData.player2 && myUid === roomData.player2.uid);
+            if (!isMyTurn) return;
+            
+            const idx = r * BOARD_SIZE + c;
+            if (roomData.board[idx] !== 0) return;
+
+            if (isHost) {
+                processMove(r, c);
+            } else {
+                if (conn && conn.open) conn.send({ type: 'MOVE_REQUEST', r, c });
+            }
+        }
+
+        // 房主專用：處理落子邏輯並廣播
+        function processMove(r, c) {
+            if (roomData.status !== 'playing') return;
+            const idx = r * BOARD_SIZE + c;
+            if (roomData.board[idx] !== 0) return;
+
+            const newBoard = [...roomData.board];
+            newBoard[idx] = roomData.turn;
+            const winner = checkWin(newBoard, r, c, roomData.turn);
+            const currentPlayerName = roomData.turn === 1 ? roomData.player1.name : roomData.player2.name;
+
+            roomData.board = newBoard;
+            roomData.lastMove = { r, c, playerName: currentPlayerName };
+            roomData.lastMoveTime = Date.now();
+
+            if (winner) {
+                roomData.status = 'finished'; 
+                roomData.winner = roomData.turn;
+                
+                // 計算分數
+                if (roomData.turn === 1) {
+                    const winDan = calculateDan(roomData.player1.score), loseDan = calculateDan(roomData.player2.score);
+                    roomData.player1.score += (winDan <= loseDan ? 10 : 5);
+                    roomData.player2.score = Math.max(0, roomData.player2.score - 5);
+                } else {
+                    const winDan = calculateDan(roomData.player2.score), loseDan = calculateDan(roomData.player1.score);
+                    roomData.player2.score += (winDan <= loseDan ? 10 : 5);
+                    roomData.player1.score = Math.max(0, roomData.player1.score - 5);
+                }
+
+                // 儲存本地分數
+                if (myUid === roomData.player1.uid) {
+                    myProfile.score = roomData.player1.score;
+                    localStorage.setItem('gomoku_profile_v2', JSON.stringify(myProfile));
+                }
+            } else {
+                roomData.turn = roomData.turn === 1 ? 2 : 1;
+            }
+
+            syncStateToGuest();
+        }
+
+        function checkWin(board, r, c, player) {
+            const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+            for (let [dr, dc] of dirs) {
+                let count = 1;
+                for (let i = 1; i <= 4; i++) {
+                    const nr = r + dr * i, nc = c + dc * i;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr * BOARD_SIZE + nc] === player) count++; else break;
+                }
+                for (let i = 1; i <= 4; i++) {
+                    const nr = r - dr * i, nc = c - dc * i;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr * BOARD_SIZE + nc] === player) count++; else break;
+                }
+                if (count >= 5) return true;
+            }
+            return false;
+        }
+
+        // 動畫特效
+        function triggerSpecialEffect(cell, playerName) {
+            if (!playerName) return;
+            if (playerName.includes("木兔光太郎")) {
+                const effect = document.createElement('div'); effect.className = 'effect-container';
+                effect.innerHTML = '<div class="effect-volleyball">🏐</div>'; cell.appendChild(effect);
+                setTimeout(() => { if(effect.parentNode) effect.remove(); }, 600);
+            } else if (playerName.includes("南雲") || playerName.includes("大佛")) {
+                const effect = document.createElement('div'); effect.className = 'effect-container effect-blood-slash';
+                effect.innerHTML = '<div class="single-slash"></div>'; cell.appendChild(effect);
+                setTimeout(() => { if(effect.parentNode) effect.remove(); }, 400);
+            }
+        }
+
+        function handleGameEnd() {
+            stopTimer();
+            const modal = document.getElementById('resultModal');
+            const title = document.getElementById('resultTitle');
+            const scoreText = document.getElementById('resultScore');
+            const restartBtn = document.getElementById('restartBtn');
+            const waitHostText = document.getElementById('waitHostText');
+            const icon = document.getElementById('resultIcon');
+
+            const amIWinner = (roomData.winner === 1 && roomData.player1.uid === myUid) || (roomData.winner === 2 && roomData.player2 && roomData.player2.uid === myUid);
+            const winnerData = roomData.winner === 1 ? roomData.player1 : roomData.player2;
+            const loserData = roomData.winner === 1 ? roomData.player2 : roomData.player1;
+            const isTimeout = roomData.timeoutWin;
+
+            if (isTimeout) title.textContent = amIWinner ? "對手超時！獲勝！" : "超時未落子，落敗！";
+            else title.textContent = amIWinner ? "漂亮！獲得勝利！" : "惜敗！再接再厲";
+
+            icon.textContent = amIWinner ? "👑" : "💀";
+            if (amIWinner) {
+                const winDan = calculateDan(winnerData.score - 10), loseDan = calculateDan(loserData.score);
+                scoreText.textContent = `積分變化: +${winDan <= loseDan ? 10 : 5}分 (目前 ${calculateDan(winnerData.score)}段)`;
+                triggerWinEffect();
+            } else {
+                scoreText.textContent = `積分變化: -5分 (目前 ${calculateDan(loserData.score)}段)`;
+                triggerLoseEffect();
+            }
+
+            modal.classList.remove('hidden');
+            if (isHost) {
+                restartBtn.classList.remove('hidden'); waitHostText.classList.add('hidden');
+            } else {
+                restartBtn.classList.add('hidden'); waitHostText.classList.remove('hidden');
+            }
+        }
+
+        function triggerWinEffect() {
+            const overlay = document.getElementById('coinOverlay'); overlay.style.display = 'block'; overlay.innerHTML = '';
+            for(let i=0; i<30; i++) {
+                const coin = document.createElement('div'); coin.className = 'coin'; coin.textContent = '🪙';
+                coin.style.left = `${Math.random() * 100}vw`; coin.style.animationDuration = `${1 + Math.random() * 2}s`;
+                coin.style.animationDelay = `${Math.random() * 0.5}s`; overlay.appendChild(coin);
+            }
+        }
+        function triggerLoseEffect() {
+            const overlay = document.getElementById('giantSlashOverlay'); overlay.style.display = 'flex';
+            const slash = overlay.querySelector('.giant-slash');
+            slash.style.animation = 'none'; slash.offsetHeight; slash.style.animation = 'giantSlashAnim 1s cubic-bezier(0.1, 0.9, 0.2, 1) forwards';
+        }
+
+        document.getElementById('restartBtn').addEventListener('click', () => resetGame(true));
+        
+        function resetGame(triggerByMe) {
+            if (!isHost) {
+                if (triggerByMe && conn && conn.open) conn.send({ type: 'RESTART_REQUEST' });
+                return;
+            }
+
+            // 房主重設邏輯
+            const p1 = roomData.player1, p2 = roomData.player2;
+            roomData = {
+                player1: p2, // 交換先後手
+                player2: p1,
+                board: Array(BOARD_SIZE * BOARD_SIZE).fill(0),
+                turn: 1, status: 'playing', lastMove: null, lastMoveTime: Date.now()
+            };
+            syncStateToGuest();
+        }
+
+        // 計時器邏輯
+        function startTimer() {
+            stopTimer();
+            if (roomData.status !== 'playing') return;
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - roomData.lastMoveTime) / 1000);
+                const remaining = Math.max(0, TIME_LIMIT - elapsed);
+                const pct = (remaining / TIME_LIMIT) * 100;
+                
+                const currentBar = roomData.turn === 1 ? timerBarP1 : timerBarP2;
+                currentBar.style.width = `${pct}%`;
+                
+                if (remaining <= 10) currentBar.classList.add('timer-warning');
+                else currentBar.classList.remove('timer-warning');
+
+                if (remaining === 0 && isHost) {
+                    roomData.status = 'finished';
+                    roomData.winner = roomData.turn === 1 ? 2 : 1;
+                    roomData.timeoutWin = true;
+                    // 超時扣分
+                    if (roomData.turn === 1) roomData.player1.score = Math.max(0, roomData.player1.score - 5);
+                    else roomData.player2.score = Math.max(0, roomData.player2.score - 5);
+                    syncStateToGuest();
+                }
+            }, 1000);
+        }
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerBarP1.style.width = '100%'; timerBarP2.style.width = '100%';
+            timerBarP1.classList.remove('timer-warning'); timerBarP2.classList.remove('timer-warning');
+        }
+
+        // 名言更新
+        const updateQuote = (e, playerNum) => {
+            const newQuote = e.target.value;
+            if (isHost && playerNum === 1) {
+                roomData.player1.quote = newQuote; syncStateToGuest();
+            } else if (!isHost && playerNum === 2) {
+                if (conn && conn.open) conn.send({ type: 'QUOTE_UPDATE', text: newQuote });
+            }
+            myProfile.quote = newQuote;
+            localStorage.setItem('gomoku_profile_v2', JSON.stringify(myProfile));
+        };
+        quoteP1.addEventListener('change', (e) => { if (roomData?.player1?.uid === myUid) updateQuote(e, 1); });
+        quoteP2.addEventListener('change', (e) => { if (roomData?.player2?.uid === myUid) updateQuote(e, 2); });
+
+        // 聊天室功能
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+        
+        function displayChatMessage(text, sender) {
+            const msgEl = document.createElement('div');
+            msgEl.className = 'bg-gray-800 rounded p-2';
+            msgEl.innerHTML = `<span class="font-bold text-orange-400">${sender}:</span> <span class="text-white">${text}</span>`;
+            chatMessages.appendChild(msgEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // 手機版提示
+            if (document.getElementById('chatModal').classList.contains('hidden')) {
+                showToast(`💬 ${sender}: ${text}`);
+            }
+        }
+
+        document.getElementById('sendChatBtn').addEventListener('click', () => {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            const sender = myProfile.name;
+            
+            displayChatMessage(text, sender); // 自己顯示
+            
+            // 傳給對方
+            if (conn && conn.open) {
+                conn.send({ type: 'CHAT', text, sender });
+            }
+            chatInput.value = '';
+        });
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') document.getElementById('sendChatBtn').click(); });
+
+        // UI 互動
+        const chatModal = document.getElementById('chatModal');
+        document.getElementById('closeChatBtn').addEventListener('click', () => chatModal.classList.add('hidden'));
+        
+        // 好友列表 (維持前端視覺功能)
+        const initFriends = () => {
+            const list = document.getElementById('friendList');
+            const friends = ['木兔光太郎', '南雲', '大佛', '日向翔陽'];
+            list.innerHTML = friends.map(f => `
+                <div class="flex items-center gap-2 p-2 hover:bg-gray-800 rounded cursor-pointer transition border border-transparent hover:border-gray-700" onclick="document.getElementById('chatModal').classList.toggle('hidden')">
+                    <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs border border-gray-600">${f[0]}</div>
+                    <div class="flex-1 min-w-0"><div class="text-white text-sm truncate font-bold">${f}</div><div class="text-xs text-green-400">● 線上</div></div>
+                </div>
+            `).join('');
+        };
+        initFriends();
+    </script>
+</body>
+</html>
